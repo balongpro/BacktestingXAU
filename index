@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forex Backtest Journal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  /* ── Reset & Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:    #0d1117;
+    --bg2:   #161b22;
+    --bg3:   #21262d;
+    --border:#30363d;
+    --text:  #e6edf3;
+    --muted: #8b949e;
+    --green: #1a9e75;
+    --red:   #c93b3b;
+    --amber: #c68a15;
+    --accent:#238636;
+    --font:  'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ── Layout ── */
+  .app { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; color: var(--text); }
+  .header small { color: var(--muted); font-size: 11px; }
+
+  /* Sheet URL input */
+  .sheet-bar {
+    display: flex; gap: 8px; align-items: center;
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+  .sheet-bar label { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .sheet-bar input {
+    flex: 1; min-width: 200px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 5px 10px;
+    border-radius: 5px; font-family: var(--font); font-size: 12px;
+  }
+  .sheet-bar input:focus { outline: none; border-color: var(--green); }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); flex-shrink: 0;
+    transition: background 0.3s;
+  }
+  .status-dot.ok  { background: var(--green); }
+  .status-dot.err { background: var(--red); }
+  #sync-status { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+  /* ── Stats ── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+  .stat {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; }
+  .stat-val { font-size: 22px; font-weight: 600; color: var(--text); }
+  .stat-val.pos { color: var(--green); }
+  .stat-val.neg { color: var(--red); }
+
+  /* ── Form ── */
+  .section-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--muted); margin-bottom: 10px;
+    border-bottom: 1px solid var(--border); padding-bottom: 6px;
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 8px; margin-bottom: 1.5rem; align-items: end;
+  }
+  .field label {
+    display: block; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px;
+  }
+  .field input, .field select {
+    width: 100%; background: var(--bg2); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 8px; border-radius: 5px;
+    font-family: var(--font); font-size: 12px;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--green); }
+  .field select option { background: var(--bg2); }
+
+  .btn {
+    padding: 8px 14px; border-radius: 5px; border: 1px solid var(--border);
+    cursor: pointer; font-family: var(--font); font-size: 12px;
+    background: var(--bg2); color: var(--text);
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--bg3); }
+  .btn.primary { border-color: var(--accent); color: #3fb950; }
+  .btn.primary:hover { background: rgba(35,134,54,0.15); }
+  .btn.danger  { border-color: #6e3535; color: var(--red); }
+  .btn.danger:hover  { background: rgba(201,59,59,0.1); }
+
+  /* ── Table ── */
+  .table-wrap { overflow-x: auto; margin-bottom: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left; padding: 7px 10px; color: var(--muted);
+    font-weight: 400; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+    background: var(--bg2);
+  }
+  td {
+    padding: 7px 10px; border-bottom: 1px solid var(--border);
+    color: var(--text); white-space: nowrap;
+  }
+  tr:hover td { background: var(--bg2); }
+  tr:last-child td { border-bottom: none; }
+  .win  { color: var(--green); }
+  .loss { color: var(--red); }
+  .be   { color: var(--amber); }
+
+  .badge {
+    display: inline-block; font-size: 10px; padding: 2px 7px;
+    border-radius: 4px; font-weight: 600; letter-spacing: 0.04em;
+  }
+  .buy  { background: rgba(26,158,117,0.18); color: #3ecf8e; border: 1px solid rgba(26,158,117,0.3); }
+  .sell { background: rgba(201,59,59,0.15);  color: #f47574; border: 1px solid rgba(201,59,59,0.3); }
+
+  .del-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; }
+  .del-btn:hover { color: var(--red); }
+
+  .synced-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green); vertical-align: middle; margin-left: 4px;
+  }
+  .pending-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--amber); vertical-align: middle; margin-left: 4px;
+  }
+
+  /* ── Chart ── */
+  .chart-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 1rem; }
+  .chart-inner { position: relative; width: 100%; height: 180px; }
+
+  /* ── Actions ── */
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .empty { text-align: center; color: var(--muted); padding: 2.5rem 0; font-size: 12px; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 16px; border-radius: 8px;
+    font-size: 12px; opacity: 0; transition: opacity 0.3s;
+    pointer-events: none; max-width: 300px; z-index: 100;
+  }
+  #toast.show { opacity: 1; }
+  #toast.ok   { border-color: var(--green); color: #3ecf8e; }
+  #toast.err  { border-color: var(--red);   color: #f47574; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div>
+      <h1>⬛ Forex Backtest Journal</h1>
+      <small id="trade-count">0 lệnh · Dữ liệu lưu local + sync Google Sheets</small>
+    </div>
+  </div>
+
+  <!-- Google Sheets Webhook URL -->
+  <div class="sheet-bar">
+    <span class="status-dot" id="dot"></span>
+    <label>Apps Script URL:</label>
+    <input type="text" id="webhook-url"
+      placeholder="Paste URL từ Google Apps Script Deploy vào đây..."
+      oninput="saveWebhook(this.value)">
+    <span id="sync-status">Chưa cấu hình</span>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Win Rate</div><div class="stat-val" id="s-wr">—</div></div>
+    <div class="stat"><div class="stat-label">Tổng R</div><div class="stat-val" id="s-r">—</div></div>
+    <div class="stat"><div class="stat-label">Expectancy</div><div class="stat-val" id="s-exp">—</div></div>
+    <div class="stat"><div class="stat-label">Profit Factor</div><div class="stat-val" id="s-pf">—</div></div>
+    <div class="stat"><div class="stat-label">Max DD (R)</div><div class="stat-val" id="s-dd">—</div></div>
+    <div class="stat"><div class="stat-label">Avg Win (R)</div><div class="stat-val" id="s-aw">—</div></div>
+  </div>
+
+  <!-- Form -->
+  <div class="section-label">Nhập lệnh mới</div>
+  <div class="form-grid">
+    <div class="field"><label>Ngày</label><input type="date" id="f-date"></div>
+    <div class="field"><label>Cặp</label>
+      <select id="f-pair">
+        <option>EUR/USD</option><option>GBP/USD</option><option>USD/JPY</option>
+        <option>XAU/USD</option><option>GBP/JPY</option><option>AUD/USD</option>
+        <option>USD/CAD</option><option>NZD/USD</option>
+      </select>
+    </div>
+    <div class="field"><label>Khung</label>
+      <select id="f-tf"><option>M5</option><option>M15</option><option>M30</option><option>H1</option><option>H4</option></select>
+    </div>
+    <div class="field"><label>Hướng</label>
+      <select id="f-dir"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
+    </div>
+    <div class="field"><label>R:R</label><input type="number" id="f-rr" value="2" step="0.1" min="0.1"></div>
+    <div class="field"><label>Kết quả</label>
+      <select id="f-res"><option value="WIN">WIN</option><option value="LOSS">LOSS</option><option value="BE">BE</option></select>
+    </div>
+    <div class="field"><label>Setup</label><input type="text" id="f-setup" placeholder="BOS, OB, FVG..."></div>
+    <div class="field" style="display:flex;align-items:flex-end;">
+      <button class="btn primary" style="width:100%" onclick="addTrade()">+ Thêm lệnh</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="section-label">Nhật ký lệnh</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ngày</th><th>Cặp</th><th>KH</th><th>Hướng</th>
+          <th>R:R</th><th>Kết quả</th><th>R</th><th>Setup</th>
+          <th>Sheet</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Equity Curve -->
+  <div class="section-label">Equity Curve (R)</div>
+  <div class="chart-wrap">
+    <div class="chart-inner">
+      <canvas id="eq-chart" role="img" aria-label="Equity curve tính theo R"></canvas>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn" onclick="retryPending()">↺ Sync lệnh chưa gửi</button>
+    <button class="btn" onclick="exportCSV()">↓ Xuất CSV</button>
+    <button class="btn danger" onclick="clearAll()">⌫ Xóa tất cả</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+let trades = JSON.parse(localStorage.getItem('bj_trades') || '[]');
+let webhookUrl = localStorage.getItem('bj_webhook') || '';
+let eqChart = null;
+
+// Init
+document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+if (webhookUrl) {
+  document.getElementById('webhook-url').value = webhookUrl;
+  document.getElementById('sync-status').textContent = 'URL đã lưu';
+  document.getElementById('dot').className = 'status-dot ok';
+}
+render();
+
+// ─────────────────────────────────────────────
+// Webhook config
+// ─────────────────────────────────────────────
+function saveWebhook(val) {
+  webhookUrl = val.trim();
+  localStorage.setItem('bj_webhook', webhookUrl);
+  const ok = webhookUrl.startsWith('https://script.google.com');
+  document.getElementById('dot').className = 'status-dot ' + (ok ? 'ok' : '');
+  document.getElementById('sync-status').textContent = ok ? 'URL hợp lệ ✓' : 'Chờ URL...';
+}
+
+// ─────────────────────────────────────────────
+// Core functions
+// ─────────────────────────────────────────────
+function save() { localStorage.setItem('bj_trades', JSON.stringify(trades)); }
+
+function rFromTrade(t) {
+  if (t.result === 'WIN')  return parseFloat(t.rr);
+  if (t.result === 'LOSS') return -1;
+  return 0;
+}
+
+async function syncToSheets(trade) {
+  if (!webhookUrl) return false;
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(trade),
+      mode: 'no-cors'
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function addTrade() {
+  const date  = document.getElementById('f-date').value;
+  const pair  = document.getElementById('f-pair').value;
+  const tf    = document.getElementById('f-tf').value;
+  const dir   = document.getElementById('f-dir').value;
+  const rr    = parseFloat(document.getElementById('f-rr').value) || 2;
+  const result= document.getElementById('f-res').value;
+  const setup = document.getElementById('f-setup').value.trim();
+  if (!date) { toast('Vui lòng chọn ngày', 'err'); return; }
+
+  const trade = { id: Date.now(), date, pair, tf, dir, rr, result, setup, synced: false };
+  trades.push(trade);
+  save(); render();
+
+  if (webhookUrl) {
+    toast('Đang gửi lên Sheets...', '');
+    const ok = await syncToSheets(trade);
+    trade.synced = ok;
+    save(); render();
+    toast(ok ? '✓ Đã ghi vào Google Sheets' : '✗ Gửi thất bại (đã lưu local)', ok ? 'ok' : 'err');
+  } else {
+    toast('Lệnh đã lưu local (chưa có Sheets URL)', '');
+  }
+}
+
+async function retryPending() {
+  if (!webhookUrl) { toast('Chưa có Apps Script URL', 'err'); return; }
+  const pending = trades.filter(t => !t.synced);
+  if (!pending.length) { toast('Tất cả đã được sync rồi', 'ok'); return; }
+  let ok = 0;
+  for (const t of pending) {
+    const success = await syncToSheets(t);
+    if (success) { t.synced = true; ok++; }
+  }
+  save(); render();
+  toast(`Đã sync ${ok}/${pending.length} lệnh`, ok === pending.length ? 'ok' : 'err');
+}
+
+function deleteTrade(id) {
+  trades = trades.filter(t => t.id !== id);
+  save(); render();
+}
+
+function clearAll() {
+  if (confirm('Xóa toàn bộ nhật ký local?')) { trades = []; save(); render(); }
+}
+
+// ─────────────────────────────────────────────
+// Stats
+// ─────────────────────────────────────────────
+function computeStats() {
+  if (!trades.length) return null;
+  const rs = trades.map(rFromTrade);
+  const totalR = rs.reduce((a,b)=>a+b,0);
+  const wins   = trades.filter(t=>t.result==='WIN');
+  const losses = trades.filter(t=>t.result==='LOSS');
+  const winRate = wins.length / trades.length;
+  const avgWin  = wins.length ? wins.reduce((a,t)=>a+parseFloat(t.rr),0)/wins.length : 0;
+  const expectancy = winRate*avgWin - (1-winRate)*(losses.length?1:0);
+  const grossWin  = wins.reduce((a,t)=>a+parseFloat(t.rr),0);
+  const grossLoss = losses.length;
+  const pf = grossLoss ? grossWin/grossLoss : (grossWin>0?999:0);
+  let peak=0,eq=0,maxDD=0;
+  rs.forEach(r=>{ eq+=r; if(eq>peak)peak=eq; if(peak-eq>maxDD)maxDD=peak-eq; });
+  return { totalR, winRate, expectancy, pf, maxDD, avgWin, rs };
+}
+
+// ─────────────────────────────────────────────
+// Render
+// ─────────────────────────────────────────────
+function render() {
+  const sorted = [...trades].sort((a,b)=>a.date.localeCompare(b.date));
+  document.getElementById('trade-count').textContent =
+    `${trades.length} lệnh · ${trades.filter(t=>t.synced).length} đã sync Sheets`;
+
+  const tbody = document.getElementById('tbody');
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">Chưa có lệnh nào. Hãy thêm lệnh đầu tiên!</td></tr>';
+    ['s-wr','s-r','s-exp','s-pf','s-dd','s-aw'].forEach(id=>{
+      const el=document.getElementById(id); el.textContent='—'; el.className='stat-val';
+    });
+    if (eqChart) { eqChart.destroy(); eqChart=null; }
+    return;
+  }
+
+  tbody.innerHTML = sorted.map(t => {
+    const r = rFromTrade(t);
+    const cls = t.result==='WIN'?'win':t.result==='LOSS'?'loss':'be';
+    const syncEl = t.synced
+      ? '<span class="synced-dot" title="Đã sync"></span>'
+      : '<span class="pending-dot" title="Chưa sync"></span>';
+    return `<tr>
+      <td>${t.date}</td>
+      <td>${t.pair}</td>
+      <td>${t.tf}</td>
+      <td><span class="badge ${t.dir.toLowerCase()}">${t.dir}</span></td>
+      <td>1:${parseFloat(t.rr).toFixed(1)}</td>
+      <td class="${cls}">${t.result}</td>
+      <td class="${cls}">${(r>=0?'+':'')+r.toFixed(1)}R</td>
+      <td style="color:var(--muted)">${t.setup||'—'}</td>
+      <td>${syncEl}</td>
+      <td><button class="del-btn" onclick="deleteTrade(${t.id})" title="Xóa">×</button></td>
+    </tr>`;
+  }).join('');
+
+  const st = computeStats();
+  const set = (id,val,cls) => { const el=document.getElementById(id); el.textContent=val; el.className='stat-val '+(cls||''); };
+  set('s-wr',  (st.winRate*100).toFixed(0)+'%',  st.winRate>=0.5?'pos':'neg');
+  set('s-r',   (st.totalR>=0?'+':'')+st.totalR.toFixed(1)+'R', st.totalR>=0?'pos':'neg');
+  set('s-exp', (st.expectancy>=0?'+':'')+st.expectancy.toFixed(2)+'R', st.expectancy>=0?'pos':'neg');
+  set('s-pf',  st.pf>=999?'∞':st.pf.toFixed(2), st.pf>=1?'pos':'neg');
+  set('s-dd',  '-'+st.maxDD.toFixed(1)+'R', 'neg');
+  set('s-aw',  '+'+st.avgWin.toFixed(1)+'R', 'pos');
+
+  let eq=0;
+  const eqData=[0], labels=['Start'];
+  sorted.forEach((t,i)=>{ eq+=rFromTrade(t); eqData.push(parseFloat(eq.toFixed(2))); labels.push('#'+(i+1)); });
+  const lc = eqData[eqData.length-1]>=0?'#1a9e75':'#c93b3b';
+
+  if (eqChart) eqChart.destroy();
+  eqChart = new Chart(document.getElementById('eq-chart'),{
+    type:'line',
+    data:{ labels, datasets:[{ label:'R', data:eqData, borderColor:lc, borderWidth:1.5,
+      pointRadius:eqData.length>30?0:3, pointBackgroundColor:lc, fill:false, tension:0.2 }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ ticks:{autoSkip:true,maxTicksLimit:10,font:{size:10},color:'#8b949e'}, grid:{color:'rgba(255,255,255,0.05)'} },
+        y:{ ticks:{font:{size:10},color:'#8b949e',callback:v=>v+'R'}, grid:{color:'rgba(255,255,255,0.05)'} }
+      }
+    }
+  });
+}
+
+// ─────────────────────────────────────────────
+// Export CSV
+// ─────────────────────────────────────────────
+function exportCSV() {
+  if (!trades.length) { toast('Chưa có lệnh', 'err'); return; }
+  const sorted = [...trades].sort((a,b)=>a.date.localeCompare(b.date));
+  const rows = sorted.map(t =>
+    [t.date,t.pair,t.tf,t.dir,'1:'+t.rr,t.result,rFromTrade(t)+'R',t.setup||''].join(',')
+  );
+  const csv = ['Ngày,Cặp,Khung,Hướng,R:R,Kết quả,R,Setup',...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download = `backtest_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('Đã xuất CSV', 'ok');
+}
+
+// ─────────────────────────────────────────────
+// Toast notification
+// ─────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ el.className=''; }, 3000);
+}
+</script>
+</body>
+</html>
