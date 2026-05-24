@@ -310,14 +310,21 @@ function rFromTrade(t) {
 async function syncToSheets(trade) {
   if (!webhookUrl) return false;
   try {
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(trade),
-      mode: 'no-cors'
+    const params = new URLSearchParams({
+      date:   trade.date,
+      pair:   trade.pair,
+      tf:     trade.tf,
+      dir:    trade.dir,
+      rr:     trade.rr,
+      result: trade.result,
+      setup:  trade.setup || ""
+    });
+    await fetch(webhookUrl + "?" + params.toString(), {
+      method: 'GET',
+      mode:   'no-cors'
     });
     return true;
-  } catch (e) {
+  } catch(e) {
     return false;
   }
 }
